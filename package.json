@@ -4,6 +4,8 @@
     "version": "0.0.1",
     "private": true,
     "devDependencies": {
+        "@types/aws-lambda": "^8.10.130",
+        "@types/jest": "^29.5.11",
         "jest": "^29.2.1"
     },
     "scripts": {
@@ -20,5 +22,8 @@
             "mjs",
             "js"
         ]
+    },
+    "dependencies": {
+        "aws-lambda": "^1.0.7"
     }
 }

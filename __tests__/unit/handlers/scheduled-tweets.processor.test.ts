@@ -1,6 +1,7 @@
-// Import scheduledEventLoggerHandler function from scheduled-event-logger.mjs
-import { scheduledEventLoggerHandler } from '../../../src/handlers/scheduled-event-logger.mjs';
+// Import scheduledEventLoggerHandler function from scheduled-event-logger.ts
+import { scheduledEventLoggerHandler } from '../../../src/handlers/scheduled-tweets-processor';
 import { jest } from '@jest/globals';
+import { Context, ScheduledEvent } from 'aws-lambda';
 
 describe('Test for sqs-payload-logger', function () {
   // This test invokes the scheduled-event-logger Lambda function and verifies that the received payload is logged
@@ -10,7 +11,7 @@ describe('Test for sqs-payload-logger', function () {
     console.info = jest.fn()
 
     // Create a sample payload with CloudWatch scheduled event message format
-    var payload = {
+    const payload: ScheduledEvent<any> = {
       "id": "cdc73f9d-aea9-11e3-9d5a-835b769c0d9c",
       "detail-type": "Scheduled Event",
       "source": "aws.events",
@@ -23,7 +24,7 @@ describe('Test for sqs-payload-logger', function () {
       "detail": {}
     }
 
-    await scheduledEventLoggerHandler(payload, null)
+    await scheduledEventLoggerHandler(payload, null as unknown as Context)
 
     // Verify that console.info has been called with the expected payload
     expect(console.info).toHaveBeenCalledWith(JSON.stringify(payload))
