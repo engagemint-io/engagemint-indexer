@@ -1,0 +1,8 @@
+node_modules
+.aws-sam/
+
+.env.local
+.idea
+
+lambda.zip
+lambda
