@@ -1,5 +1,5 @@
 // Import scheduledEventLoggerHandler function from scheduled-event-logger.ts
-import { scheduledTweetHandler } from '../../../src/handlers/scheduled-tweets-processor';
+import { handler } from '../../../handler';
 import { jest } from '@jest/globals';
 import { Context, ScheduledEvent } from 'aws-lambda';
 
@@ -25,7 +25,7 @@ describe('Test for sqs-payload-logger', function () {
       version: ''
     }
 
-    await scheduledTweetHandler(payload, null as unknown as Context)
+    await handler(payload, null as unknown as Context)
 
     // Verify that console.info has been called with the expected payload
     expect(console.info).toHaveBeenCalledWith(JSON.stringify(payload))
