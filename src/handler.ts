@@ -1,17 +1,34 @@
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { Context, ScheduledEvent } from 'aws-lambda';
+import { TweetSearchRecentV2Paginator, TwitterApi } from 'twitter-api-v2';
 
-// import Twit from 'twit';
-//
-// // Configure Twit
-// const TwitClient = new Twit({
-//     consumer_key: process.env.TWITTER_CONSUMER_KEY || '',
-//     consumer_secret: process.env.TWITTER_CONSUMER_SECRET || '',
-//     access_token: process.env.TWITTER_ACCESS_TOKEN || '',
-//     access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
-//     timeout_ms: 60 * 1000,
-// });
+import { GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { secretsManagerClient } from './utils/secretsManagerClient';
+
+export const getSecrets = async () => {
+	const command = new GetSecretValueCommand({
+		SecretId: 'engagemint-x-credentials'
+	});
+	const secrets = await secretsManagerClient.send(command);
+	if (!secrets.SecretString) {
+		return {};
+	}
+	const parsedSecrets = JSON.parse(secrets.SecretString);
+	return {
+		appKey: parsedSecrets.X_API_KEY,
+		appSecret: parsedSecrets.X_API_SECRET
+	};
+};
+
+export const getTwitterApiClient = async () => {
+	const { appKey, appSecret } = await getSecrets();
+	const twitterConsumerClient = new TwitterApi({
+		appKey: appKey,
+		appSecret: appSecret
+	});
+	return await twitterConsumerClient.appLogin();
+};
 
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
@@ -50,54 +67,63 @@ export const fetchUsersForTicker = async (ticker: string) => {
 	}
 };
 
-// @ts-ignore
-const fetchUserTweetsWithTicker = async (user: string, ticker: string, since: string, until: string) => {
-	// const params = {
-	//     q: `from:${user} AND ($${ticker} OR #${ticker}) since:${since} until:${until}`,
-	//     count: 100,
-	// };
-
+const fetchUserTweetsWithTicker = async (user: string, ticker: string, startTime: string, endTime: string): Promise<TweetSearchRecentV2Paginator> => {
 	try {
-		// const { data } = await TwitClient.get('search/tweets', params);
-		//Simply return the tweets here
-		// @ts-ignore
-		// return data["statuses"];
-		return [];
+		const twitterConsumerClient = await getTwitterApiClient();
+		return await twitterConsumerClient.v2.search({
+			query: `from:${user} #${ticker}`,
+			start_time: startTime,
+			end_time: endTime,
+			expansions: 'attachments.media_keys',
+			'media.fields': 'public_metrics',
+			'tweet.fields': 'public_metrics'
+		});
 	} catch (err) {
 		console.error('Error:', err);
-		return [];
+		return {} as TweetSearchRecentV2Paginator;
 	}
-};
-
-export const queryEngagement = (tweets: any[]): any[] => {
-	console.log('tweets', tweets);
-
-	//TODO: Iterate through tweets and query twitter engagement API to get engagement metrics
-	return [];
 };
 
 export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
 	console.info('HANDLING_EVENT: ', JSON.stringify(event));
 
-	// TODO: Fetch tickers from DynamoDB engagemint-project_configuration_table
 	const tickers = await fetchAllTickers();
 	console.log('tickers', tickers);
 	for (const ticker of tickers) {
 		const tickerString = ticker.ticker.S || '';
 
-		//TODO: Fetch users from DynamoDB engagemint-registered_users_table by ticker
 		const users = await fetchUsersForTicker(tickerString);
 
 		for (const user of users) {
-			const since = '2022-01-01';
-			const until = '2022-01-31';
+			// TODO: Get the start and end time from the epoch configuration table
+			// Get current time
+			let currentDate = new Date();
 
-			const userTweetsMentioningTicker = await fetchUserTweetsWithTicker(user.twitter_id, tickerString, since, until);
-			console.log('userTweetsMentioningTicker', userTweetsMentioningTicker);
+			// Subtract 1 minute as per Twitter API docs 'end_time' must be a minimum of 10 seconds prior to the request time.
+			// we subtract 1 minute to be safe
+			currentDate.setMinutes(currentDate.getMinutes() - 1);
 
-			//TODO: Iterate through tweets and query twitter engagement API
+			// We need RFC3339 format per Twitter API docs. The toISOString() method in JavaScript returns a string in
+			// simplified extended ISO format (ISO 8601), which is functionally equivalent to the RFC3339 datetime format.
+			// Therefore, we can use toISOString() to get a date-time string that is compatible with both ISO 8601 and RFC3339.
+			const endTime = currentDate.toISOString();
 
-			// const tweetsWithEngagement = queryEngagement(userTweetsMentioningTicker);
+			// Get a previous time (e.g., 24 hours ago) in RFC3339 format
+			const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+			const userTweetsMentioningTicker = await fetchUserTweetsWithTicker(user.twitter_id, tickerString, startTime, endTime);
+			const tweets = userTweetsMentioningTicker.tweets;
+			const includes = userTweetsMentioningTicker.includes;
+
+			for (const tweet of tweets) {
+				console.log('Tweet:', tweet);
+				// const likes = tweet.public_metrics?.like_count;
+				// const retweets = tweet.public_metrics?.retweet_count;
+				const attachedMedia = includes.media.filter(m => tweet.attachments?.media_keys?.includes(m.media_key));
+				for (const m of attachedMedia) {
+					console.log('Media view count:', m.public_metrics?.view_count);
+				}
+			}
 
 			//TODO: Use the tweetsWithEngagement to create/update the users entry into the engagemint-epoch_leaderboard_table
 		}
