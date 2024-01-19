@@ -35,7 +35,7 @@ const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2
 
 const docClient = DynamoDBDocumentClient.from(client);
 
-export const fetchAllTickers = async () => {
+export const fetchAllTickerConfigs = async () => {
 	const params = {
 		TableName: 'engagemint-project_configuration_table'
 	};
@@ -71,7 +71,7 @@ const fetchUserTweetsWithTicker = async (user: string, ticker: string, startTime
 	try {
 		const twitterConsumerClient = await getTwitterApiClient();
 		return await twitterConsumerClient.v2.search({
-			query: `from:${user} #${ticker}`,
+			query: `from:${user} ${ticker}`,
 			start_time: startTime,
 			end_time: endTime,
 			expansions: 'attachments.media_keys',
@@ -87,15 +87,14 @@ const fetchUserTweetsWithTicker = async (user: string, ticker: string, startTime
 export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
 	console.info('HANDLING_EVENT: ', JSON.stringify(event));
 
-	const tickers = await fetchAllTickers();
-	console.log('tickers', tickers);
-	for (const ticker of tickers) {
-		const tickerString = ticker.ticker.S || '';
+	const tickerConfigs = await fetchAllTickerConfigs();
+	for (const tickerConfig of tickerConfigs) {
+		const tickerString = tickerConfig.ticker.S || '';
+		const epochStartDate = tickerConfig.epoch_start_date_utc.S || '';
 
 		const users = await fetchUsersForTicker(tickerString);
 
 		for (const user of users) {
-			// TODO: Get the start and end time from the epoch configuration table
 			// Get current time
 			let currentDate = new Date();
 
@@ -108,10 +107,7 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 			// Therefore, we can use toISOString() to get a date-time string that is compatible with both ISO 8601 and RFC3339.
 			const endTime = currentDate.toISOString();
 
-			// Get a previous time (e.g., 24 hours ago) in RFC3339 format
-			const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-			const userTweetsMentioningTicker = await fetchUserTweetsWithTicker(user.twitter_id, tickerString, startTime, endTime);
+			const userTweetsMentioningTicker = await fetchUserTweetsWithTicker(user.twitter_id, tickerString, epochStartDate, endTime);
 			const tweets = userTweetsMentioningTicker.tweets;
 			const includes = userTweetsMentioningTicker.includes;
 
