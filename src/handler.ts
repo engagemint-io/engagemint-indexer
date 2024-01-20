@@ -123,8 +123,8 @@ export function getCurrentEpochNumber(now: Date, epochStartDate: string, epochLe
 	const startDate = DateTime.fromISO(epochStartDate);
 	let nowDateTime = DateTime.fromJSDate(now);
 
-	// Adding one second to the current date to account for the edge case where we run this at the exact start of the hour
-	// and in this case we could false the previous epoch number.
+	// Adding one second to the current date to account for the edge case when we run job at the exact start of an hour
+	// e.g. 2024-01-23T00:00:00.000Z and in this case we could incorrectly return the previous epoch number.
 	nowDateTime = nowDateTime.plus({ seconds: 1 });
 	if (nowDateTime < startDate) {
 		throw new Error('Invalid date. The current date cannot be before the epoch start date.');
