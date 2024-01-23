@@ -1,4 +1,4 @@
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { Context, ScheduledEvent } from 'aws-lambda';
 import { TweetSearchRecentV2Paginator, TwitterApi } from 'twitter-api-v2';
@@ -200,6 +200,19 @@ function calculatePoints(tweet: any, includes: any, multipliers: any): any {
 	return { totalPoints, likePoints, quotePoints, retweetPoints, viewPoints, videoViewPoints };
 }
 
+export const persistUserStatsInBulk = async (userStats: any[]) => {
+	const params = {
+		RequestItems: {
+			'LeaderboardTable': userStats.map(userStat => ({
+				PutRequest: {
+					Item: userStat
+				}
+			}))
+		}
+	};
+	return client.send(new BatchWriteCommand(params));
+};
+
 export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
 	console.info(JSON.stringify(event));
 
@@ -217,7 +230,7 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 		const currentEpochStartTime = getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
 
 		const users = await fetchUsersForTicker(tickerString);
-
+		const userStats = [];
 		for (const user of users) {
 			let currentDate = new Date();
 			currentDate.setMinutes(currentDate.getMinutes() - 1);
@@ -255,17 +268,32 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 			}
 
 			const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
-			await persistToLeaderboardTable(
-				tickerString,
-				user.twitter_id,
-				xUsername,
-				currentEpochNumber.toString(),
+			const userStat = {
+				ticker: tickerString,
+				twitter_id: user.twitter_id,
+				username: xUsername,
+				epoch: currentEpochNumber.toString(),
 				totalPoints,
 				likePoints,
 				quotePoints,
 				retweetPoints,
 				viewPoints,
-				videoViewPoints);
+				videoViewPoints,
+				rank: 0
+			};
+			userStats.push(userStat);
+		}
+		if (userStats.length > 0) {
+			// Sort userStats in descending order based on totalPoints
+			userStats.sort((a, b) => b.totalPoints - a.totalPoints);
+
+			// Assign rank based on the position in the sorted array
+			userStats.forEach((userStat, index) => {
+				userStat.rank = index + 1;
+			});
+
+			// Persist user stats in bulk
+			await persistUserStatsInBulk(userStats);
 		}
 	}
 };
