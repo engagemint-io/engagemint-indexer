@@ -2,8 +2,33 @@
 import { handler } from '../../../handler';
 import { jest } from '@jest/globals';
 import { Context, ScheduledEvent } from 'aws-lambda';
+import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand } from '@aws-sdk/client-dynamodb';
+
+// Mock the DynamoDBDocumentClient and its send method
+jest.mock('@aws-sdk/lib-dynamodb', () => {
+  return {
+    DynamoDBDocumentClient: {
+      from: jest.fn().mockImplementation(() => {
+        return {
+          send: jest.fn().mockImplementation((command) => {
+            if (command instanceof ScanCommand) {
+              return Promise.resolve({ Items: [] });
+            } else if (command instanceof QueryCommand) {
+              return Promise.resolve({ Items: [] });
+            } else if (command instanceof PutCommand) {
+              return Promise.resolve({});
+            }
+            return Promise.reject(new Error('Command not recognized'));
+          }),
+        };
+      }),
+    },
+  };
+});
 
 describe('Test for sqs-payload-logger', function () {
+
   // This test invokes the scheduled-event-logger Lambda function and verifies that the received payload is logged
   it('Verifies the payload is logged', async () => {
     // Mock console.log statements so we can verify them. For more information, see

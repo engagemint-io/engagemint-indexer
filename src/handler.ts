@@ -188,7 +188,7 @@ function calculatePoints(tweet: any, includes: any, multipliers: any): any {
 }
 
 export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
-	console.info('HANDLING_EVENT: ', JSON.stringify(event));
+	console.info(JSON.stringify(event));
 
 	const tickerConfigs = await fetchAllTickerConfigs();
 	for (const tickerConfig of tickerConfigs) {
