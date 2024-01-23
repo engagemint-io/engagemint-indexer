@@ -85,8 +85,20 @@ const fetchUserTweetsWithTicker = async (user: string, ticker: string, startTime
 	}
 };
 
+export const getUsernameById = async (userId: string) => {
+	const twitterConsumerClient = await getTwitterApiClient();
+	try {
+		const user = await twitterConsumerClient.v2.user(userId);
+		return user.data.username;
+	} catch (err) {
+		console.error('Error fetching user profile:', err);
+		return null;
+	}
+};
+
 export const persistToLeaderboardTable = async (ticker: string,
 																								userAccountId: string,
+																								username: string,
 																								epoch: string,
 																								totalPoints: number,
 																								likePoints: number,
@@ -101,6 +113,7 @@ export const persistToLeaderboardTable = async (ticker: string,
 		Item: {
 			ticker_epoch_composite: ticker_epoch_composite,
 			user_account_id: userAccountId,
+			username: username,
 			last_updated_at: new Date().toISOString(),
 			total_points: totalPoints,
 			favorite_points: likePoints,
@@ -210,9 +223,13 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 			currentDate.setMinutes(currentDate.getMinutes() - 1);
 			const endTime = currentDate.toISOString();
 
+			const xUsername = await getUsernameById(user.twitter_id) || '';
 			const userTweetsMentioningTicker =
 				await fetchUserTweetsWithTicker(user.twitter_id, tickerString, currentEpochStartTime, endTime);
 			const tweets = userTweetsMentioningTicker.tweets;
+			if (!tweets || tweets.length === 0) {
+				continue;
+			}
 			const filteredTweets = filterTweets(tweets, tickerString);
 			const includes = userTweetsMentioningTicker.includes;
 
@@ -241,6 +258,7 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 			await persistToLeaderboardTable(
 				tickerString,
 				user.twitter_id,
+				xUsername,
 				currentEpochNumber.toString(),
 				totalPoints,
 				likePoints,
