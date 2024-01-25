@@ -1,136 +1,12 @@
-import { BatchWriteCommand, DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Context, ScheduledEvent } from 'aws-lambda';
-import { TweetSearchRecentV2Paginator, TwitterApi } from 'twitter-api-v2';
 import { DateTime } from 'luxon';
 
-import { GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { secretsManagerClient } from './utils/secretsManagerClient';
-
-export const getSecrets = async () => {
-	const command = new GetSecretValueCommand({
-		SecretId: 'engagemint-x-credentials'
-	});
-	const secrets = await secretsManagerClient.send(command);
-	if (!secrets.SecretString) {
-		return {};
-	}
-	const parsedSecrets = JSON.parse(secrets.SecretString);
-	return {
-		appKey: parsedSecrets.X_API_KEY,
-		appSecret: parsedSecrets.X_API_SECRET
-	};
-};
-
-export const getTwitterApiClient = async () => {
-	const { appKey, appSecret } = await getSecrets();
-	const twitterConsumerClient = new TwitterApi({
-		appKey: appKey,
-		appSecret: appSecret
-	});
-	return await twitterConsumerClient.appLogin();
-};
+import { Database, DynamoDBService } from './database';
+import { Twitter, TwitterService } from './twitter';
 
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
-
-const docClient = DynamoDBDocumentClient.from(client);
-
-export const fetchAllTickerConfigs = async () => {
-	const params = {
-		TableName: 'engagemint-project_configuration_table'
-	};
-
-	try {
-		const { Items } = await docClient.send(new ScanCommand(params));
-		return Items || [];
-	} catch (err) {
-		console.error('Error querying DynamoDB:', err);
-		return [];
-	}
-};
-
-export const fetchUsersForTicker = async (ticker: string) => {
-	const params = {
-		TableName: 'engagemint-registered_users_table',
-		KeyConditionExpression: 'ticker = :ticker',
-		ExpressionAttributeValues: {
-			':ticker': ticker
-		}
-	};
-
-	try {
-		const { Items } = await docClient.send(new QueryCommand(params));
-		return Items || [];
-	} catch (err) {
-		console.error('Error querying DynamoDB:', err);
-		return [];
-	}
-};
-
-const fetchUserTweetsWithTicker = async (user: string, ticker: string, startTime: string, endTime: string): Promise<TweetSearchRecentV2Paginator> => {
-	try {
-		const twitterConsumerClient = await getTwitterApiClient();
-		return await twitterConsumerClient.v2.search({
-			query: `from:${user} ${ticker}`,
-			start_time: startTime,
-			end_time: endTime,
-			expansions: 'attachments.media_keys',
-			'media.fields': 'public_metrics',
-			'tweet.fields': 'public_metrics'
-		});
-	} catch (err) {
-		console.error('Error:', err);
-		return {} as TweetSearchRecentV2Paginator;
-	}
-};
-
-export const getUsernameById = async (userId: string) => {
-	const twitterConsumerClient = await getTwitterApiClient();
-	try {
-		const user = await twitterConsumerClient.v2.user(userId);
-		return user.data.username;
-	} catch (err) {
-		console.error('Error fetching user profile:', err);
-		return null;
-	}
-};
-
-export const persistToLeaderboardTable = async (ticker: string,
-																								userAccountId: string,
-																								username: string,
-																								epoch: string,
-																								totalPoints: number,
-																								likePoints: number,
-																								quotePoints: number,
-																								retweetPoints: number,
-																								viewPoints: number,
-																								videoViewPoints: number) => {
-	const ticker_epoch_composite = `${epoch}#${ticker}`;
-
-	const params = {
-		TableName: 'engagemint-epoch_leaderboard_table',
-		Item: {
-			ticker_epoch_composite: ticker_epoch_composite,
-			user_account_id: userAccountId,
-			username: username,
-			last_updated_at: new Date().toISOString(),
-			total_points: totalPoints,
-			favorite_points: likePoints,
-			quote_points: quotePoints,
-			retweet_points: retweetPoints,
-			view_points: viewPoints,
-			video_view_points: videoViewPoints
-		}
-	};
-
-	try {
-		await docClient.send(new PutCommand(params));
-		console.log(`Successfully persisted data for ${ticker_epoch_composite}`);
-	} catch (err) {
-		console.error('Error persisting data to DynamoDB:', err);
-	}
-};
 
 export function getCurrentEpochNumber(now: Date, epochStartDate: string, epochLengthDays: number): number {
 	const startDate = DateTime.fromISO(epochStartDate);
@@ -200,23 +76,11 @@ function calculatePoints(tweet: any, includes: any, multipliers: any): any {
 	return { totalPoints, likePoints, quotePoints, retweetPoints, viewPoints, videoViewPoints };
 }
 
-export const persistUserStatsInBulk = async (userStats: any[]) => {
-	const params = {
-		RequestItems: {
-			'LeaderboardTable': userStats.map(userStat => ({
-				PutRequest: {
-					Item: userStat
-				}
-			}))
-		}
-	};
-	return client.send(new BatchWriteCommand(params));
-};
-
-export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
-	console.info(JSON.stringify(event));
-
-	const tickerConfigs = await fetchAllTickerConfigs();
+export const handler = async (_event: ScheduledEvent, _context: Context): Promise<void> => {
+	console.info(JSON.stringify(_event));
+	const dbService: Database = new DynamoDBService(client);
+	const twitterService: Twitter = new TwitterService();
+	const tickerConfigs = await dbService.fetchAllTickerConfigs();
 	for (const tickerConfig of tickerConfigs) {
 		const tickerString = tickerConfig.ticker.S || '';
 		const firstEpochStartDate = tickerConfig.epoch_start_date_utc.S || '';
@@ -229,16 +93,16 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 		const currentEpochNumber = getCurrentEpochNumber(new Date(), firstEpochStartDate, epochLengthDays);
 		const currentEpochStartTime = getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
 
-		const users = await fetchUsersForTicker(tickerString);
+		const users = await dbService.fetchUsersForTicker(tickerString);
 		const userStats = [];
 		for (const user of users) {
 			let currentDate = new Date();
 			currentDate.setMinutes(currentDate.getMinutes() - 1);
 			const endTime = currentDate.toISOString();
 
-			const xUsername = await getUsernameById(user.twitter_id) || '';
+			const xUsername = await twitterService.getUsernameById(user.twitter_id) || '';
 			const userTweetsMentioningTicker =
-				await fetchUserTweetsWithTicker(user.twitter_id, tickerString, currentEpochStartTime, endTime);
+				await twitterService.fetchUserTweetsWithTicker(user.twitter_id, tickerString, currentEpochStartTime, endTime);
 			const tweets = userTweetsMentioningTicker.tweets;
 			if (!tweets || tweets.length === 0) {
 				continue;
@@ -293,7 +157,7 @@ export const handler = async (event: ScheduledEvent, _context: Context): Promise
 			});
 
 			// Persist user stats in bulk
-			await persistUserStatsInBulk(userStats);
+			await dbService.persistUserStatsInBulk(userStats);
 		}
 	}
 };
