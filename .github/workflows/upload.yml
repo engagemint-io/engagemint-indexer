@@ -29,4 +29,4 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Upload ZIP to S3
-        run: ./scripts/deploy.sh
+        run: yarn deploy
