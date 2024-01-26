@@ -1,45 +1,12 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Context, ScheduledEvent } from 'aws-lambda';
-import { DateTime } from 'luxon';
 
 import { Database, DynamoDBService } from './database';
 import { Twitter, TwitterService } from './twitter';
+import { Time, TimeService } from './time';
 
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
-
-export function getCurrentEpochNumber(now: Date, epochStartDate: string, epochLengthDays: number): number {
-	const startDate = DateTime.fromISO(epochStartDate);
-	let nowDateTime = DateTime.fromJSDate(now);
-
-	// Adding one second to the current date to account for the edge case when we run job at the exact start of an hour
-	// e.g. 2024-01-23T00:00:00.000Z and in this case we could incorrectly return the previous epoch number.
-	nowDateTime = nowDateTime.plus({ seconds: 1 });
-	if (nowDateTime < startDate) {
-		throw new Error('Invalid date. The current date cannot be before the epoch start date.');
-	}
-
-	// Edge case where the epoch start date is the same as the current date. Which means the epoch just started.
-	if (nowDateTime.equals(startDate)) {
-		return 1;
-	}
-
-	const diffInDays = nowDateTime.diff(startDate, 'days').days;
-
-	return Math.ceil(diffInDays / epochLengthDays);
-}
-
-export function getCurrentEpochStartDate(firstEpochStartDate: string, currentEpochNumber: number, epochLengthDays: number): Date {
-	let startDate = DateTime.fromISO(firstEpochStartDate);
-	// If the current epoch number is 0, return the start date of the first epoch
-	if (currentEpochNumber <= 0) {
-		throw new Error('Invalid epoch. The current epoch can only be 1 or greater.');
-	}
-	// Subtract 1 from the currentEpochNumber because the first epoch is considered as 1
-	const daysToAdd = (currentEpochNumber - 1) * epochLengthDays;
-	startDate = startDate.plus({ days: daysToAdd });
-	return startDate.toJSDate();
-}
 
 export function filterTweets(tweets: any[], ticker: string): any[] {
 	return tweets.filter(tweet => {
@@ -77,9 +44,9 @@ function calculatePoints(tweet: any, includes: any, multipliers: any): any {
 }
 
 export const handler = async (_event: ScheduledEvent, _context: Context): Promise<void> => {
-	console.info(JSON.stringify(_event));
 	const dbService: Database = new DynamoDBService(client);
 	const twitterService: Twitter = new TwitterService();
+	const timeService: Time = new TimeService();
 	const tickerConfigs = await dbService.fetchAllTickerConfigs();
 	for (const tickerConfig of tickerConfigs) {
 		const tickerString = tickerConfig.ticker.S || '';
@@ -90,13 +57,13 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 		const viewMultiplier = Number(tickerConfig.view_multiplier.N) || 1;
 		const videoViewMultiplier = Number(tickerConfig.video_view_multiplier.N) || 1;
 		const quoteMultiplier = Number(tickerConfig.quote_multiplier.N) || 1;
-		const currentEpochNumber = getCurrentEpochNumber(new Date(), firstEpochStartDate, epochLengthDays);
-		const currentEpochStartTime = getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
+		const currentDate = timeService.getCurrentTime();
+		const currentEpochNumber = timeService.getCurrentEpochNumber(currentDate, firstEpochStartDate, epochLengthDays);
+		const currentEpochStartTime = timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
 
 		const users = await dbService.fetchUsersForTicker(tickerString);
 		const userStats = [];
 		for (const user of users) {
-			let currentDate = new Date();
 			currentDate.setMinutes(currentDate.getMinutes() - 1);
 			const endTime = currentDate.toISOString();
 

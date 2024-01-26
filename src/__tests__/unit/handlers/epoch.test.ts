@@ -1,11 +1,13 @@
-import { getCurrentEpochNumber, getCurrentEpochStartDate } from '../../../handler';
+import { Time, TimeService } from '../../../time';
+
+const timeService: Time = new TimeService();
 
 describe('getCurrentEpochNumber function', () => {
 	it('Returns epoch number 1 for a date within the first epoch', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-18T00:00:00+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(1);
 	});
 
@@ -13,7 +15,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-16T00:00:00+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(1);
 	});
 
@@ -21,7 +23,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-26T00:00:00+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(2);
 	});
 
@@ -29,7 +31,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-22T23:59:59+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(1);
 	});
 
@@ -37,7 +39,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-23T00:00:00+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(2);
 	});
 
@@ -45,7 +47,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2024-01-16T00:00:00+00:00';
 		const epochLengthDays = 7;
 		const now = new Date('2024-01-23T00:00:01+00:00');
-		const result = getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
+		const result = timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays);
 		expect(result).toBe(2);
 	});
 
@@ -53,7 +55,7 @@ describe('getCurrentEpochNumber function', () => {
 		const epochStartDate = '2022-01-01';
 		const epochLengthDays = 7;
 		const now = new Date('2021-12-31');
-		expect(() => getCurrentEpochNumber(now, epochStartDate, epochLengthDays)).toThrow('Invalid date. The current date cannot be before the epoch start date.');
+		expect(() => timeService.getCurrentEpochNumber(now, epochStartDate, epochLengthDays)).toThrow('Invalid date. The current date cannot be before the epoch start date.');
 	});
 });
 
@@ -62,7 +64,7 @@ describe('getCurrentEpochStartDate function', () => {
 		const firstEpochStartDate = '2024-01-16T00:00:00.000Z';
 		const currentEpochNumber = 1;
 		const epochLengthDays = 7;
-		const result = getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays);
+		const result = timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays);
 		expect(result.toISOString()).toBe('2024-01-16T00:00:00.000Z');
 	});
 
@@ -70,7 +72,7 @@ describe('getCurrentEpochStartDate function', () => {
 		const firstEpochStartDate = '2024-01-16T00:00:00.000Z';
 		const currentEpochNumber = 2;
 		const epochLengthDays = 7;
-		const result = getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays);
+		const result = timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays);
 		expect(result.toISOString()).toBe('2024-01-23T00:00:00.000Z');
 	});
 
@@ -78,13 +80,13 @@ describe('getCurrentEpochStartDate function', () => {
 		const firstEpochStartDate = '2024-01-16T00:00:00.000Z';
 		const currentEpochNumber = 0;
 		const epochLengthDays = 7;
-		expect(() => getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays)).toThrow('Invalid epoch. The current epoch can only be 1 or greater.');
+		expect(() => timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays)).toThrow('Invalid epoch. The current epoch can only be 1 or greater.');
 	});
 
 	it('Returns same start date for negative number passed as epoch', () => {
 		const firstEpochStartDate = '2024-01-16T00:00:00.000Z';
 		const currentEpochNumber = -20;
 		const epochLengthDays = 7;
-		expect(() => getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays)).toThrow('Invalid epoch. The current epoch can only be 1 or greater.');
+		expect(() => timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays)).toThrow('Invalid epoch. The current epoch can only be 1 or greater.');
 	});
 });

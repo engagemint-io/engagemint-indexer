@@ -49,12 +49,18 @@ jest.mock('../../../twitter', () => {
 let mockGetUsernameById = jest.fn();
 let mockFetchUserTweetsWithTicker = jest.fn();
 
+afterEach(() => {
+	jest.restoreAllMocks();
+});
+
 describe('Handler tests', function() {
 	const testTicker = 'TESTTICKER';
 	const username = 'TESTUSER';
 	const twitterId = '1234567890';
 	// Add a new test to assess the handler
 	it('Verifies the handler calls the correct methods', async () => {
+		const mockDate = new Date('2024-01-20T00:00:00+00:00'); // This can be any date you want
+		jest.spyOn(global, 'Date').mockImplementation(() => mockDate as any);
 		mockFetchAllTickerConfigs.mockImplementation(() => [{
 			ticker: { S: testTicker },
 			epoch_start_date_utc: { S: '2024-01-16T00:00:00+00:00' },
@@ -104,15 +110,4 @@ describe('Handler tests', function() {
 		}]);
 	});
 
-	// This test invokes the scheduled-event-logger Lambda function and verifies that the received payload is logged
-	it('Verifies the payload is logged', async () => {
-		// Mock console.log statements so we can verify them. For more information, see
-		// https://jestjs.io/docs/en/mock-functions.html
-		console.info = jest.fn();
-		mockFetchAllTickerConfigs = jest.fn().mockImplementation(() => []);
-		await handler(payload, null as unknown as Context);
-
-		// Verify that console.info has been called with the expected payload
-		expect(console.info).toHaveBeenCalledWith(JSON.stringify(payload));
-	});
 });
