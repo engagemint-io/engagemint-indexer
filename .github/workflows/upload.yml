@@ -19,7 +19,7 @@ jobs:
         run: yarn install
 
       - name: Build project
-        run: yarn install
+        run: yarn build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -29,4 +29,4 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Upload ZIP to S3
-        run: ts-node scripts/upload.ts
+        run: npx ts-node scripts/upload.ts
