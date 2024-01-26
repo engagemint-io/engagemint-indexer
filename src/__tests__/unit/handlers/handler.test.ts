@@ -72,6 +72,7 @@ describe('Handler tests', function() {
 		const retweetCount = 3;
 		const impressionCount = 4;
 		const viewCount = 7;
+		const nowDateTimeString = '2024-01-18T00:00:00+00:00';
 
 		mockFetchAllTickerConfigs.mockImplementation(() => [{
 			ticker: { S: testTicker },
@@ -96,7 +97,7 @@ describe('Handler tests', function() {
 
 		mockFetchUsersForTicker.mockImplementation(() => [{ twitter_id: twitterId }]);
 		mockGetUsernameById.mockImplementation(() => username);
-		mockGetCurrentTime.mockImplementation(() => new Date('2024-01-18T00:00:00+00:00'));
+		mockGetCurrentTime.mockImplementation(() => new Date(nowDateTimeString));
 		mockGetCurrentEpochNumber.mockImplementation(() => 1);
 		mockGetCurrentEpochStartDate.mockImplementation(() => new Date('2024-01-16T00:00:00+00:00'));
 
@@ -110,16 +111,16 @@ describe('Handler tests', function() {
 		const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
 
 		expect(mockPersistUserStatsInBulk).toHaveBeenCalledWith([{
+			ticker_epoch_composite: `${testTicker}#1`,
 			username: username,
-			twitter_id: twitterId,
-			ticker: testTicker,
-			epoch: "1",
-			likePoints: likePoints,
-			quotePoints: quotePoints,
-			retweetPoints: retweetPoints,
-			viewPoints: viewPoints,
-			videoViewPoints: videoViewPoints,
-			totalPoints: totalPoints,
+			last_updated_at: new Date(nowDateTimeString).toISOString(),
+			user_account_id: twitterId,
+			favorite_points: likePoints,
+			quote_points: quotePoints,
+			retweet_points: retweetPoints,
+			view_points: viewPoints,
+			video_view_points: videoViewPoints,
+			total_points: totalPoints,
 			rank: 1
 		}]);
 	});

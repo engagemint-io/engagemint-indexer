@@ -64,8 +64,9 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 		const users = await dbService.fetchUsersForTicker(tickerString);
 		const userStats = [];
 		for (const user of users) {
-			currentDate.setMinutes(currentDate.getMinutes() - 1);
-			const endTime = currentDate.toISOString();
+			const adjustedCurrentDate = timeService.getCurrentTime();
+			adjustedCurrentDate.setMinutes(adjustedCurrentDate.getMinutes() - 1);
+			const endTime = adjustedCurrentDate.toISOString();
 
 			const xUsername = await twitterService.getUsernameById(user.twitter_id) || '';
 			const userTweetsMentioningTicker =
@@ -99,24 +100,25 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 			}
 
 			const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
+			const ticker_epoch_composite = `${tickerString}#${currentEpochNumber}`;
 			const userStat = {
-				ticker: tickerString,
-				twitter_id: user.twitter_id,
+				ticker_epoch_composite: ticker_epoch_composite,
+				user_account_id: user.twitter_id,
+				last_updated_at: currentDate.toISOString(),
 				username: xUsername,
-				epoch: currentEpochNumber.toString(),
-				totalPoints,
-				likePoints,
-				quotePoints,
-				retweetPoints,
-				viewPoints,
-				videoViewPoints,
+				total_points: totalPoints,
+				favorite_points: likePoints,
+				quote_points: quotePoints,
+				retweet_points: retweetPoints,
+				view_points: viewPoints,
+				video_view_points: videoViewPoints,
 				rank: 0
 			};
 			userStats.push(userStat);
 		}
 		if (userStats.length > 0) {
 			// Sort userStats in descending order based on totalPoints
-			userStats.sort((a, b) => b.totalPoints - a.totalPoints);
+			userStats.sort((a, b) => b.total_points - a.total_points);
 
 			// Assign rank based on the position in the sorted array
 			userStats.forEach((userStat, index) => {

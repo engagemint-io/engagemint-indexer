@@ -65,7 +65,7 @@ export class DynamoDBService implements Database {
 		for (const userStatsChunk of userStatsChunks) {
 			const params = {
 				RequestItems: {
-					'LeaderboardTable': userStatsChunk.map(userStat => ({
+					'engagemint-epoch_leaderboard_table': userStatsChunk.map(userStat => ({
 						PutRequest: {
 							Item: userStat
 						}
