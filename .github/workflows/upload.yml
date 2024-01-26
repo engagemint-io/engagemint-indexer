@@ -29,4 +29,4 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Upload ZIP to S3
-        run: npx ts-node scripts/upload.ts
+        run: ./scripts/deploy.sh
