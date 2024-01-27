@@ -9,10 +9,10 @@ import { Time, TimeService } from './time';
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
 
 export function filterTweets(tweets: any[], ticker: string): any[] {
+	const formattedTicker = ticker.toLowerCase();
 	return tweets.filter(tweet => {
-		const tickerWithDollar = `$${ticker}`;
-		const tickerWithHash = `#${ticker}`;
-		return tweet.text.includes(tickerWithDollar) || tweet.text.includes(tickerWithHash);
+		const text = tweet.text.toLowerCase();
+		return text.includes(`$${formattedTicker}`) || text.includes(`#${formattedTicker}`);
 	});
 }
 
@@ -100,6 +100,9 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 			}
 
 			const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
+			if (totalPoints === 0) {
+				continue;
+			}
 			const ticker_epoch_composite = `${tickerString}#${currentEpochNumber}`;
 			const userStat = {
 				ticker_epoch_composite: ticker_epoch_composite,
