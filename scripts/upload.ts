@@ -1,9 +1,7 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { readFile } from 'fs/promises';
-import { fromIni } from '@aws-sdk/credential-provider-ini';
 
-const profile = 'Sei';
-const s3Client = new S3Client({ region: 'us-west-2', credentials: fromIni({ profile }) });
+const s3Client = new S3Client({ region: 'us-west-2' });
 const bucketName = 'engagemint';
 const localFilePath = './lambda.zip';
 

@@ -1,4 +1,4 @@
-node_modules
+node_modules/
 .aws-sam/
 
 .env.local
@@ -6,3 +6,6 @@ node_modules
 
 lambda.zip
 lambda
+/.env
+
+tsconfig.tsbuildinfo

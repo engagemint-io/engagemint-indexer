@@ -1,105 +1,135 @@
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { Context, ScheduledEvent } from 'aws-lambda';
 
-// import Twit from 'twit';
-//
-// // Configure Twit
-// const TwitClient = new Twit({
-//     consumer_key: process.env.TWITTER_CONSUMER_KEY || '',
-//     consumer_secret: process.env.TWITTER_CONSUMER_SECRET || '',
-//     access_token: process.env.TWITTER_ACCESS_TOKEN || '',
-//     access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
-//     timeout_ms: 60 * 1000,
-// });
+import { Database, DynamoDBService } from './database';
+import { Twitter, TwitterService } from './twitter';
+import { Time, TimeService } from './time';
 
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
 
-const docClient = DynamoDBDocumentClient.from(client);
+export function filterTweets(tweets: any[], ticker: string): any[] {
+	const formattedTicker = ticker.toLowerCase();
+	return tweets.filter(tweet => {
+		const text = tweet.text.toLowerCase();
+		return text.includes(`$${formattedTicker}`) || text.includes(`#${formattedTicker}`);
+	});
+}
 
-export const fetchAllTickers = async () => {
-	const params = {
-		TableName: 'engagemint-project_configuration_table'
-	};
+// Function to calculate points
+function calculatePoints(tweet: any, includes: any, multipliers: any): any {
+	const { likeMultiplier, quoteMultiplier, retweetMultiplier, viewMultiplier, videoViewMultiplier } = multipliers;
+	let likePoints = 0;
+	let quotePoints = 0;
+	let retweetPoints = 0;
+	let viewPoints = 0;
+	let videoViewPoints = 0;
 
-	try {
-		const { Items } = await docClient.send(new ScanCommand(params));
-		return Items || [];
-	} catch (err) {
-		console.error('Error querying DynamoDB:', err);
-		return [];
+	const likes = tweet.public_metrics?.like_count || 0;
+	likePoints += likes * likeMultiplier;
+	const quotes = tweet.public_metrics?.quote_count || 0;
+	quotePoints += quotes * quoteMultiplier;
+	const retweets = tweet.public_metrics?.retweet_count || 0;
+	retweetPoints += retweets * retweetMultiplier;
+	const views = tweet.public_metrics?.impression_count || 0;
+	viewPoints += views * viewMultiplier;
+
+	const attachedMedia = includes.media.filter((m: any) => tweet.attachments?.media_keys?.includes(m.media_key));
+	for (const m of attachedMedia) {
+		videoViewPoints += (m.public_metrics?.view_count || 0) * videoViewMultiplier;
 	}
-};
 
-export const fetchUsersForTicker = async (ticker: string) => {
-	const params = {
-		TableName: 'engagemint-registered_users_table',
-		KeyConditionExpression: 'ticker = :ticker',
-		ExpressionAttributeValues: {
-			':ticker': ticker
-		}
-	};
+	const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
+	return { totalPoints, likePoints, quotePoints, retweetPoints, viewPoints, videoViewPoints };
+}
 
-	try {
-		const { Items } = await docClient.send(new QueryCommand(params));
-		return Items || [];
-	} catch (err) {
-		console.error('Error querying DynamoDB:', err);
-		return [];
-	}
-};
+export const handler = async (_event: ScheduledEvent, _context: Context): Promise<void> => {
+	const dbService: Database = new DynamoDBService(client);
+	const twitterService: Twitter = new TwitterService();
+	const timeService: Time = new TimeService();
+	const tickerConfigs = await dbService.fetchAllTickerConfigs();
+	for (const tickerConfig of tickerConfigs) {
+		const tickerString = tickerConfig.ticker.S || '';
+		const firstEpochStartDate = tickerConfig.epoch_start_date_utc.S || '';
+		const epochLengthDays = Number(tickerConfig.epoch_length_days.N) || 1;
+		const likeMultiplier = Number(tickerConfig.like_multiplier.N) || 1;
+		const retweetMultiplier = Number(tickerConfig.retweet_multiplier.N) || 1;
+		const viewMultiplier = Number(tickerConfig.view_multiplier.N) || 1;
+		const videoViewMultiplier = Number(tickerConfig.video_view_multiplier.N) || 1;
+		const quoteMultiplier = Number(tickerConfig.quote_multiplier.N) || 1;
+		const currentDate = timeService.getCurrentTime();
+		const currentEpochNumber = timeService.getCurrentEpochNumber(currentDate, firstEpochStartDate, epochLengthDays);
+		const currentEpochStartTime = timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
 
-// @ts-ignore
-const fetchUserTweetsWithTicker = async (user: string, ticker: string, since: string, until: string) => {
-	// const params = {
-	//     q: `from:${user} AND ($${ticker} OR #${ticker}) since:${since} until:${until}`,
-	//     count: 100,
-	// };
-
-	try {
-		// const { data } = await TwitClient.get('search/tweets', params);
-		//Simply return the tweets here
-		// @ts-ignore
-		// return data["statuses"];
-		return [];
-	} catch (err) {
-		console.error('Error:', err);
-		return [];
-	}
-};
-
-export const queryEngagement = (tweets: any[]): any[] => {
-	console.log('tweets', tweets);
-
-	//TODO: Iterate through tweets and query twitter engagement API to get engagement metrics
-	return [];
-};
-
-export const handler = async (event: ScheduledEvent, _context: Context): Promise<void> => {
-	console.info('HANDLING_EVENT: ', JSON.stringify(event));
-
-	// TODO: Fetch tickers from DynamoDB engagemint-project_configuration_table
-	const tickers = await fetchAllTickers();
-	console.log('tickers', tickers);
-	for (const ticker of tickers) {
-		const tickerString = ticker.ticker.S || '';
-
-		//TODO: Fetch users from DynamoDB engagemint-registered_users_table by ticker
-		const users = await fetchUsersForTicker(tickerString);
-
+		const users = await dbService.fetchUsersForTicker(tickerString);
+		const userStats = [];
 		for (const user of users) {
-			const since = '2022-01-01';
-			const until = '2022-01-31';
+			const adjustedCurrentDate = timeService.getCurrentTime();
+			adjustedCurrentDate.setMinutes(adjustedCurrentDate.getMinutes() - 1);
+			const endTime = adjustedCurrentDate.toISOString();
 
-			const userTweetsMentioningTicker = await fetchUserTweetsWithTicker(user.twitter_id, tickerString, since, until);
-			console.log('userTweetsMentioningTicker', userTweetsMentioningTicker);
+			const xUsername = await twitterService.getUsernameById(user.twitter_id) || '';
+			const userTweetsMentioningTicker =
+				await twitterService.fetchUserTweetsWithTicker(user.twitter_id, tickerString, currentEpochStartTime, endTime);
+			const tweets = userTweetsMentioningTicker.tweets;
+			if (!tweets || tweets.length === 0) {
+				continue;
+			}
+			const filteredTweets = filterTweets(tweets, tickerString);
+			const includes = userTweetsMentioningTicker.includes;
 
-			//TODO: Iterate through tweets and query twitter engagement API
+			let likePoints = 0;
+			let quotePoints = 0;
+			let retweetPoints = 0;
+			let viewPoints = 0;
+			let videoViewPoints = 0;
 
-			// const tweetsWithEngagement = queryEngagement(userTweetsMentioningTicker);
+			for (const tweet of filteredTweets) {
+				const points = calculatePoints(tweet, includes, {
+					likeMultiplier,
+					quoteMultiplier,
+					retweetMultiplier,
+					viewMultiplier,
+					videoViewMultiplier
+				});
+				likePoints += points.likePoints;
+				quotePoints += points.quotePoints;
+				retweetPoints += points.retweetPoints;
+				viewPoints += points.viewPoints;
+				videoViewPoints += points.videoViewPoints;
+			}
 
-			//TODO: Use the tweetsWithEngagement to create/update the users entry into the engagemint-epoch_leaderboard_table
+			const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
+			if (totalPoints === 0) {
+				continue;
+			}
+			const ticker_epoch_composite = `${tickerString}#${currentEpochNumber}`;
+			const userStat = {
+				ticker_epoch_composite: ticker_epoch_composite,
+				user_account_id: user.twitter_id,
+				last_updated_at: currentDate.toISOString(),
+				username: xUsername,
+				total_points: totalPoints,
+				favorite_points: likePoints,
+				quote_points: quotePoints,
+				retweet_points: retweetPoints,
+				view_points: viewPoints,
+				video_view_points: videoViewPoints,
+				rank: 0
+			};
+			userStats.push(userStat);
+		}
+		if (userStats.length > 0) {
+			// Sort userStats in descending order based on totalPoints
+			userStats.sort((a, b) => b.total_points - a.total_points);
+
+			// Assign rank based on the position in the sorted array
+			userStats.forEach((userStat, index) => {
+				userStat.rank = index + 1;
+			});
+
+			// Persist user stats in bulk
+			await dbService.persistUserStatsInBulk(userStats);
 		}
 	}
 };
