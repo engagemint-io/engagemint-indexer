@@ -43,12 +43,35 @@ function calculatePoints(tweet: any, includes: any, multipliers: any): any {
 	return { totalPoints, likePoints, quotePoints, retweetPoints, viewPoints, videoViewPoints };
 }
 
+function verifyFields(tickerConfig: any): boolean {
+	const fields = [
+		'ticker',
+		'epoch_start_date_utc',
+		'epoch_length_days',
+		'like_multiplier',
+		'retweet_multiplier',
+		'view_multiplier',
+		'video_view_multiplier',
+		'quote_multiplier'
+	];
+	for (const field of fields) {
+		if (!tickerConfig[field]) {
+			console.error(`${field} is undefined for ticker: ${tickerConfig.ticker.S}. Skipping ticker processing.`);
+			return false;
+		}
+	}
+	return true;
+}
+
 export const handler = async (_event: ScheduledEvent, _context: Context): Promise<void> => {
 	const dbService: Database = new DynamoDBService(client);
 	const twitterService: Twitter = new TwitterService();
 	const timeService: Time = new TimeService();
 	const tickerConfigs = await dbService.fetchAllTickerConfigs();
 	for (const tickerConfig of tickerConfigs) {
+		if (!verifyFields(tickerConfig)) {
+			continue;
+		}
 		const tickerString = tickerConfig.ticker.S || '';
 		const firstEpochStartDate = tickerConfig.epoch_start_date_utc.S || '';
 		const epochLengthDays = Number(tickerConfig.epoch_length_days.N) || 1;
