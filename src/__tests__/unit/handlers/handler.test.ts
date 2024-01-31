@@ -43,6 +43,29 @@ describe('Handler tests', function() {
 		expect(mockPersistUserStatsInBulk).not.toHaveBeenCalled();
 	});
 
+	it('Verifies ticker config is skipped if require field is missing', async () => {
+		const consoleSpy = jest.spyOn(console, 'error');
+		mockFetchAllTickerConfigs.mockImplementation(() => [{
+			ticker: { S: testTicker },
+			epoch_length_days: { N: '7' },
+			like_multiplier: { N: likeMultiplier.toString() },
+			retweet_multiplier: { N: retweetMultiplier.toString() },
+			view_multiplier: { N: viewMultiplier.toString() },
+			video_view_multiplier: { N: videoViewMultiplier.toString() },
+			quote_multiplier: { N: quoteMultiplier.toString() }
+		}]);
+
+		mockPersistUserStatsInBulk = jest.fn();
+		await handler(payload, null as unknown as Context);
+		// Verify that console.error was called
+		expect(consoleSpy).toHaveBeenCalled();
+
+		// If you want to verify that console.error was called with a specific message, you can do this:
+		expect(consoleSpy).toHaveBeenCalledWith('epoch_start_date_utc is undefined for ticker: TESTTICKER. Skipping ticker processing.');
+
+		expect(mockPersistUserStatsInBulk).not.toHaveBeenCalled();
+	});
+
 	it('Verifies no user points persisted when there are no users for a ticker', async () => {
 		mockFetchAllTickerConfigs.mockImplementation(() => [{
 			ticker: { S: testTicker },
