@@ -4,6 +4,7 @@ import { Context, ScheduledEvent } from 'aws-lambda';
 import { Database, DynamoDBService } from './database';
 import { Twitter, TwitterService } from './twitter';
 import { Time, TimeService } from './time';
+import { DateTime } from 'luxon';
 
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
@@ -81,6 +82,12 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 		const videoViewMultiplier = Number(tickerConfig.video_view_multiplier.N) || 1;
 		const quoteMultiplier = Number(tickerConfig.quote_multiplier.N) || 1;
 		const currentDate = timeService.getCurrentTime();
+		const firstEpochStartDateDateTime = DateTime.fromISO(firstEpochStartDate);
+		if (firstEpochStartDateDateTime > DateTime.fromJSDate(currentDate)) {
+			console.log(`Skipping ticker: ${tickerString} as its epoch has not started yet.`);
+			continue;
+		}
+
 		const currentEpochNumber = timeService.getCurrentEpochNumber(currentDate, firstEpochStartDate, epochLengthDays);
 		const currentEpochStartTime = timeService.getCurrentEpochStartDate(firstEpochStartDate, currentEpochNumber, epochLengthDays).toISOString();
 
@@ -91,7 +98,11 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 			adjustedCurrentDate.setMinutes(adjustedCurrentDate.getMinutes() - 1);
 			const endTime = adjustedCurrentDate.toISOString();
 
-			const xUsername = await twitterService.getUsernameById(user.twitter_id) || '';
+			const xUsername = await twitterService.getUsernameById(user.twitter_id);
+			if (xUsername === null) {
+				console.log(`Skipping user: ${user.twitter_id} as username is not found.`);
+				continue;
+			}
 			const userTweetsMentioningTicker =
 				await twitterService.fetchUserTweetsWithTicker(user.twitter_id, tickerString, currentEpochStartTime, endTime);
 			const tweets = userTweetsMentioningTicker.tweets;

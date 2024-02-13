@@ -27,6 +27,10 @@ export class TwitterService implements Twitter {
 		try {
 			const twitterConsumerClient = await this.twitterApiClient;
 			const user = await twitterConsumerClient.v2.user(userId);
+			if (user.errors && user.errors.length > 0) {
+				console.error('Error fetching user profile:', user.errors);
+				return null;
+			}
 			return user.data.username;
 		} catch (err) {
 			console.error('Error fetching user profile:', err);
