@@ -147,6 +147,50 @@ describe('Handler tests', function() {
 			rank: 1
 		}]);
 	});
+	it('should skip user if username is not found', async () => {
+		const consoleSpy = jest.spyOn(console, 'log');
+		const event = {} as ScheduledEvent;
+		const context = {} as Context;
+
+		mockFetchAllTickerConfigs.mockImplementation(() => [{
+			ticker: { S: testTicker },
+			epoch_start_date_utc: { S: '2024-01-16T00:00:00+00:00' },
+			epoch_length_days: { N: '7' },
+			like_multiplier: { N: likeMultiplier.toString() },
+			retweet_multiplier: { N: retweetMultiplier.toString() },
+			view_multiplier: { N: viewMultiplier.toString() },
+			video_view_multiplier: { N: videoViewMultiplier.toString() },
+			quote_multiplier: { N: quoteMultiplier.toString() }
+		}]);
+		mockFetchUsersForTicker.mockImplementation(() => [{ twitter_id: twitterId }]);
+		mockGetUsernameById.mockImplementation(() => null);
+
+		await handler(event, context);
+
+		expect(consoleSpy).toHaveBeenCalledWith(`Skipping user: ${twitterId} as username is not found.`);
+	});
+
+	it('should skip ticker if epoch has not started yet', async () => {
+		const consoleSpy = jest.spyOn(console, 'log');
+		const event = {} as ScheduledEvent;
+		const context = {} as Context;
+
+		mockFetchAllTickerConfigs.mockImplementation(() => [{
+			ticker: { S: testTicker },
+			epoch_start_date_utc: { S: '2024-01-16T00:00:00+00:00' },
+			epoch_length_days: { N: '7' },
+			like_multiplier: { N: likeMultiplier.toString() },
+			retweet_multiplier: { N: retweetMultiplier.toString() },
+			view_multiplier: { N: viewMultiplier.toString() },
+			video_view_multiplier: { N: videoViewMultiplier.toString() },
+			quote_multiplier: { N: quoteMultiplier.toString() }
+		}]);
+		mockGetCurrentTime.mockImplementation(() => new Date('2024-01-15T00:00:00+00:00'));
+
+		await handler(event, context);
+
+		expect(consoleSpy).toHaveBeenCalledWith(`Skipping ticker: ${testTicker} as its epoch has not started yet.`);
+	});
 })
 
 // Create a sample payload with CloudWatch scheduled event message format
