@@ -9,8 +9,9 @@
         "build": "esbuild src/handler.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outdir=lambda",
         "postbuild": "zip -r lambda.zip lambda",
         "deploy": "./scripts/deploy.sh",
-        "test": "ts-node dev-utils/test-event.ts",
+        "functional-test": "ts-node dev-utils/test-event.ts",
         "jest": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+        "test": "jest",
         "test:coverage": "yarn test --coverage"
     },
     "dependencies": {
