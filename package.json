@@ -10,7 +10,8 @@
         "postbuild": "zip -r lambda.zip lambda",
         "deploy": "./scripts/deploy.sh",
         "test": "ts-node dev-utils/test-event.ts",
-        "jest": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+        "jest": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+        "test:coverage": "yarn test --coverage"
     },
     "dependencies": {
         "@aws-sdk/client-dynamodb": "^3.485.0",
