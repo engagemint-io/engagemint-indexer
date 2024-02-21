@@ -9,3 +9,4 @@ lambda
 /.env
 
 tsconfig.tsbuildinfo
+/coverage

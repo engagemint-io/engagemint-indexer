@@ -112,7 +112,12 @@ describe('Handler tests', function() {
 			return {
 				tweets: [{
 					text: 'this is a tweet about $' + testTicker,
-					public_metrics: { like_count: likeCount, quote_count: quoteCount, retweet_count: retweetCount, impression_count: impressionCount },
+					public_metrics: {
+						like_count: likeCount,
+						quote_count: quoteCount,
+						retweet_count: retweetCount,
+						impression_count: impressionCount
+					},
 					attachments: { media_keys: ['123'] }
 				}], includes: { media: [{ public_metrics: { view_count: viewCount }, media_key: '123' }] }
 			};
@@ -191,7 +196,86 @@ describe('Handler tests', function() {
 
 		expect(consoleSpy).toHaveBeenCalledWith(`Skipping ticker: ${testTicker} as its epoch has not started yet.`);
 	});
-})
+
+	// test to check if user is retweeting own post and filter it out. The text of the tweet will contain "RT @" + username in the beginning
+	it('should skip user if user is retweeting own post', async () => {
+		const likeCount = 1;
+		const quoteCount = 2;
+		const retweetCount = 3;
+		const impressionCount = 4;
+		const viewCount = 7;
+		const nowDateTimeString = '2024-01-18T00:00:00+00:00';
+
+		mockFetchAllTickerConfigs.mockImplementation(() => [{
+			ticker: { S: testTicker },
+			epoch_start_date_utc: { S: '2024-01-16T00:00:00+00:00' },
+			epoch_length_days: { N: '7' },
+			like_multiplier: { N: likeMultiplier.toString() },
+			retweet_multiplier: { N: retweetMultiplier.toString() },
+			view_multiplier: { N: viewMultiplier.toString() },
+			video_view_multiplier: { N: videoViewMultiplier.toString() },
+			quote_multiplier: { N: quoteMultiplier.toString() }
+		}]);
+
+		mockFetchUserTweetsWithTicker.mockImplementation(() => {
+			return {
+				tweets: [
+					{
+						text: `this is a tweet about $${testTicker}`,
+						public_metrics: {
+							like_count: likeCount,
+							quote_count: quoteCount,
+							retweet_count: retweetCount,
+							impression_count: impressionCount
+						},
+						attachments: { media_keys: ['123'] }
+					},
+					{
+						text: `RT @${username}: this is a tweet about $${testTicker}`,
+						public_metrics: {
+							like_count: likeCount,
+							quote_count: quoteCount,
+							retweet_count: retweetCount,
+							impression_count: impressionCount
+						},
+						attachments: { media_keys: ['123'] }
+					}
+				], includes: { media: [{ public_metrics: { view_count: viewCount }, media_key: '123' }] }
+			};
+		});
+
+		mockFetchUsersForTicker.mockImplementation(() => [{ twitter_id: twitterId }]);
+		mockGetUsernameById.mockImplementation(() => username);
+		mockGetCurrentTime.mockImplementation(() => new Date(nowDateTimeString));
+		mockGetCurrentEpochNumber.mockImplementation(() => 1);
+		mockGetCurrentEpochStartDate.mockImplementation(() => new Date('2024-01-16T00:00:00+00:00'));
+
+		await handler(payload, null as unknown as Context);
+
+		const likePoints = likeCount * likeMultiplier;
+		const quotePoints = quoteCount * quoteMultiplier;
+		const retweetPoints = retweetCount * retweetMultiplier;
+		const viewPoints = impressionCount * viewMultiplier;
+		const videoViewPoints = viewCount * videoViewMultiplier;
+		const totalPoints = likePoints + quotePoints + retweetPoints + viewPoints + videoViewPoints;
+
+		// same as in happy path test, we expect the user to be persisted with the same points from one tweet as the
+		// second tweet should be filtered out
+		expect(mockPersistUserStatsInBulk).toHaveBeenCalledWith([{
+			ticker_epoch_composite: `${testTicker}#1`,
+			username: username,
+			last_updated_at: new Date(nowDateTimeString).toISOString(),
+			user_account_id: twitterId,
+			favorite_points: likePoints,
+			quote_points: quotePoints,
+			retweet_points: retweetPoints,
+			view_points: viewPoints,
+			video_view_points: videoViewPoints,
+			total_points: totalPoints,
+			rank: 1
+		}]);
+	});
+});
 
 // Create a sample payload with CloudWatch scheduled event message format
 const payload: ScheduledEvent<any> = {
