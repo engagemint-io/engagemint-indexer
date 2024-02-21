@@ -9,11 +9,13 @@ import { DateTime } from 'luxon';
 // Must have an AWS profile named EngageMint setup
 const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-west-2' } as any);
 
-export function filterTweets(tweets: any[], ticker: string): any[] {
+export function filterTweets(tweets: any[], ticker: string, username: string): any[] {
 	const formattedTicker = ticker.toLowerCase();
 	return tweets.filter(tweet => {
 		const text = tweet.text.toLowerCase();
-		return text.includes(`$${formattedTicker}`) || text.includes(`#${formattedTicker}`);
+		const isRetweetOfSelf = text.startsWith(`rt @${username.toLowerCase()}:`);
+		const isAboutTicker = text.includes(`$${formattedTicker}`) || text.includes(`#${formattedTicker}`);
+		return isAboutTicker && !isRetweetOfSelf;
 	});
 }
 
@@ -109,7 +111,7 @@ export const handler = async (_event: ScheduledEvent, _context: Context): Promis
 			if (!tweets || tweets.length === 0) {
 				continue;
 			}
-			const filteredTweets = filterTweets(tweets, tickerString);
+			const filteredTweets = filterTweets(tweets, tickerString, xUsername);
 			const includes = userTweetsMentioningTicker.includes;
 
 			let likePoints = 0;
